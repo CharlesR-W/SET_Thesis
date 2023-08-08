@@ -1,0 +1,15 @@
+GLPSOL: GLPK LP/MIP Solver, v4.65
+Parameter(s) specified in the command line:
+ --lp /tmp/linopy-problem-y7ymzke_.lp --output /tmp/linopy-solve-emad315n.sol
+ --log /home/crw/Programming/SET_THESIS/log.txt --display /dev/null
+Reading problem data from '/tmp/linopy-problem-y7ymzke_.lp'...
+9 rows, 4 columns, 12 non-zeros
+76 lines were read
+GLPK Simplex Optimizer, v4.65
+9 rows, 4 columns, 12 non-zeros
+Preprocessing...
+~     0: obj =   0.000000000e+00  infeas =  0.000e+00
+OPTIMAL SOLUTION FOUND BY LP PREPROCESSOR
+Time used:   0.0 secs
+Memory used: 0.0 Mb (39693 bytes)
+Writing basic solution to '/tmp/linopy-solve-emad315n.sol'...

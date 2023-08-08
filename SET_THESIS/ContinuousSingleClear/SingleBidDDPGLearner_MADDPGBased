@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Wed May 31 18:54:08 2023
+
+@author: crw
+"""
+
+from SingleBidMADDPGLearner import SingleBidMADDPGLearner, QNet
+
+import gymnasium as gym
+import math
+import random
+import matplotlib
+import matplotlib.pyplot as plt
+from collections import namedtuple, deque
+from itertools import count
+
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
+# if GPU is to be used
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+class SingleBidDDPGLearner_MADDPGBased(SingleBidMADDPGLearner):
+    
+    def __init__(self, param_dict, env, agent_id=None):
+        super(SingleBidDDPGLearner_MADDPGBased, self).__init__()
+        
+        self.my_Q_net = QNet(self.my_state_dim, self.my_act_final_dim)
+        self.local_critic_loss_history = []
+        
+        learning_rate = param_dict["learning_rate"]
+        self.local_critic_optimizer = optim.AdamW(self.my_Q_net.parameters(), lr=learning_rate, amsgrad=True)
+        
+    def learn_from_batch(self, batch):
+        #breakpoint()
+        
+        #MADDPG Learner uses states_n and acts_n
+        #breakpoint()
+        states = torch.zeros(
+            size=[len(batch),self.num_agents,self.my_state_dim],
+            dtype=torch.float32
+            ).to(device)
+        my_states = torch.zeros(
+            size=[len(batch),self.my_state_dim],
+            dtype=torch.float32
+            ).to(device)
+        acts = torch.zeros(
+            size=[len(batch),self.num_agents,self.my_act_final_dim],
+            dtype=torch.float32
+            ).to(device)
+        rewards = torch.zeros(
+            size=[len(batch)],
+            dtype=torch.float32
+            ).to(device)
+        
+        for lv_tran, tran in enumerate(batch):
+            states[lv_tran] = tran.state
+            acts[lv_tran] = tran.act
+            rewards[lv_tran] = tran.reward
+        
+        #states = 
+        #acts = 
+        breakpoint()
+        # batch is a batch of transitions sampled randomly
+        other_idxs = [lv for lv in range(self.num_agents) if not lv == self.agent_id]
+        
+        my_acts = acts[:,self.agent_id].flatten(start_dim=1)
+        other_acts = acts[:,other_idxs].flatten(start_dim=1)#all except agent_id
+        
+        
+        current_Q = self.my_Q_net(states[self.agent_id], my_acts)
+        current_MADDPG_Q = self.Q_net(states.flatten(start_dim=1), my_acts, other_acts)
+        
+        target_Q = rewards.unsqueeze(1)/1000 #+ self.discount_factor*next_Q # TODO confirm  Q _remains_ detached here
+        #breakpoint()
+        #print(torch.mean(current_Q))
+        #breakpoint()
+        # first, the Q-loss for the critic
+        self.critic_optimizer.zero_grad() #TODO Idk if we should zero AFTER getting current_Q
+        #MSE of Q(s,a) vs r + g*Q(s',a')
+        critic_loss_val = self.critic_loss_fn(current_MADDPG_Q, target_Q)
+        critic_loss_val.backward()
+        self.critic_optimizer.step()
+        
+        self.local_critic_optimizer.zero_grad()
+        local_critic_loss_val = self.critic_loss_fn(current_Q, target_Q)
+        local_critic_loss_val.backward()
+        self.local_critic_optimizer.step()
+        
+        #record the critic loss
+        self.critic_loss_history.append(critic_loss_val.item())
+        self.local_critic_loss_history.append(local_critic_loss_val.item())
+        
+        #the policy loss
+        self.policy_optimizer.zero_grad()
+        #calculate the action the policy would take
+        breakpoint()
+        #get the actions
+        my_policy_acts = self.act(my_states, noise=False) #NB remember doesn't do anything yet
+        self.env._scale_up_bid(my_policy_acts[0])
+        
+        policy_loss_val = -1*torch.mean(self.my_Q_net(states[self.agent_id], my_policy_acts)) #TODO should there be a detach on Q?  I want grad through a, but not through the Q params
+        policy_loss_val.backward()
+        self.policy_optimizer.step()
+        
+        #record the policy loss for the batch
+        self.policy_loss_history.append(policy_loss_val.item())
